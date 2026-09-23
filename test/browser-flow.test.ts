@@ -271,17 +271,18 @@ test("an external tab change during Jev's decision stops before clicking", { tim
   const previous = process.env.PI_CODING_AGENT_DIR;
   const html = await readFile(new URL("./fixtures/flow.html", import.meta.url), "utf8");
   let changeTarget: (() => Promise<unknown>) | undefined;
+  let terminalMode = false;
   const server = createServer(async (req, res) => {
     if (req.url === "/flow") { res.setHeader("content-type", "text/html"); res.end(html); return; }
     if (req.url === "/changed") { res.setHeader("content-type", "text/html"); res.end('<h1>Changed page</h1>'); return; }
     if (req.url !== "/jev") { res.writeHead(404).end(); return; }
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
-    const { state } = JSON.parse(Buffer.concat(chunks).toString()) as { state: { refs: Record<string, { name: string }> } };
-    await changeTarget?.();
+    const { state } = JSON.parse(Buffer.concat(chunks).toString()) as { state: { url: string; refs: Record<string, { name: string }> } };
+    if (!state.url.endsWith("/changed")) await changeTarget?.();
     const target = Object.entries(state.refs).find(([, ref]) => ref.name === "Projects")?.[0];
     res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify({ answers: { operation: { choice: "CLICK" }, click_target: { choice: target } } }));
+    res.end(JSON.stringify({ answers: { operation: { choice: terminalMode ? state.url.endsWith("/changed") ? "BLOCKED" : "DONE" : "CLICK" }, click_target: { choice: target } } }));
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -306,6 +307,11 @@ test("an external tab change during Jev's decision stops before clicking", { tim
     assert.match((stale.details as { url?: string }).url ?? "", /\/changed/);
     const page = await call("agent_browser", { args: ["--json", "get", "url"] });
     assert.match(page.content[0]?.type === "text" ? page.content[0].text : "", /\/changed/);
+    await call("agent_browser", { args: ["open", `http://127.0.0.1:${port}/flow`] });
+    terminalMode = true;
+    const staleDone = await call("jev_browser", { goal: "Reach the project form" });
+    assert.equal((staleDone.details as { status?: string }).status, "blocked", JSON.stringify(staleDone.content));
+    assert.match((staleDone.details as { url?: string }).url ?? "", /\/changed/);
   } finally {
     try { await closeBrowser?.(); } catch {}
     server.closeAllConnections();

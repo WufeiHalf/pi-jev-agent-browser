@@ -10,7 +10,8 @@ export default function browserPlugin(pi: ExtensionAPI): void {
       pi.registerTool({
         name: "jev_browser",
         label: "Jev Browser",
-        description: "Delegate one multi-step browser goal on the current page to Jev, then hand control back.",
+        description: "Delegate one bounded multi-step browser goal on the current page to Jev, then hand control back. Open the page first with agent_browser; use agent_browser to enter text and verify results.",
+        promptSnippet: "After agent_browser opens a page, jev_browser can handle one multi-step navigation goal. It cannot enter text or determine whether E2E passed; use agent_browser for input and acceptance.",
         parameters: Type.Object({ goal: Type.String() }),
         executionMode: "sequential",
         async execute(toolCallId, { goal }, signal, _onUpdate, ctx) {

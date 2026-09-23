@@ -204,14 +204,17 @@ export async function delegateBrowserGoal(
       currentUrl = current.url;
       jevCalls += 1;
       const decision = await decide(config, goal, current, executionSignal);
-      if (decision.operation === "DONE") return result("completed", "Jev reached the requested stopping point; calling agent must verify it");
-      if (decision.operation === "NEEDS_INPUT") return result("input-required", "Calling agent needs to enter text");
-      if (decision.operation === "BLOCKED") return result("blocked", "Jev could not advance the goal");
       const latestTabs = tabs(await run(["tab", "list"]));
       if (latestTabs.find(tab => tab.active)?.tabId !== tabId
         || latestTabs.some(tab => !beforeTabs.some(prior => prior.tabId === tab.tabId))) {
         return result("blocked", "Browser tabs changed while Jev was deciding");
       }
+      const latest = observation(await run(["snapshot"]));
+      currentUrl = latest.url;
+      if (latest.url !== current.url || latest.snapshot !== current.snapshot) continue;
+      if (decision.operation === "DONE") return result("completed", "Jev reached the requested stopping point; calling agent must verify it");
+      if (decision.operation === "NEEDS_INPUT") return result("input-required", "Calling agent needs to enter text");
+      if (decision.operation === "BLOCKED") return result("blocked", "Jev could not advance the goal");
       const target = decision.target ? current.refs[decision.target] : undefined;
       const signature = `${decision.operation}|${target?.role ?? ""}|${target?.name ?? ""}`;
       if (signature === lastActionSignature && current.snapshot === lastActionSnapshot) {
