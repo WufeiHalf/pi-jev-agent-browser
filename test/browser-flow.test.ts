@@ -73,8 +73,9 @@ test("calling agent delegates a multi-step goal and takes over the same browser"
     const operation = body.state.goal.includes("Fill") ? "NEEDS_INPUT" : needsSelection ? "SELECT" : target ? "CLICK" : "DONE";
     const selectChoice = Object.entries(body.questions.select_target?.criteria ?? {}).find(([, label]) => label.includes("Engineering"))?.[0];
     res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify({ answers: { operation: { choice: operation }, click_target: target ? { choice: target } : undefined,
-      select_target: needsSelection ? { choice: selectChoice } : undefined } }));
+    res.end(JSON.stringify({ answers: { operation: { choice: operation, probabilities: { [operation]: 0.2, BLOCKED: 0.8 } },
+      click_target: target ? { choice: target, probabilities: { [target]: 0.2, none_of_the_above: 0.8 } } : undefined,
+      select_target: needsSelection ? { choice: selectChoice, probabilities: { [selectChoice!]: 0.2, s1: 0.8 } } : undefined } }));
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -213,7 +214,7 @@ test("invalid Jev refs and provider failures hand the unchanged page back", { ti
   const agentDir = join(cwd, "agent");
   const previous = process.env.PI_CODING_AGENT_DIR;
   const html = await readFile(new URL("./fixtures/flow.html", import.meta.url), "utf8");
-  let failureMode: "bad-ref" | "bad-probability" | "http" = "bad-ref";
+  let failureMode: "bad-ref" | "bad-probability" | "unsupported" | "http" = "bad-ref";
   const server = createServer((req, res) => {
     if (req.url === "/flow") { res.setHeader("content-type", "text/html"); res.end(html); return; }
     if (req.url !== "/jev") { res.writeHead(404).end(); return; }
@@ -221,6 +222,7 @@ test("invalid Jev refs and provider failures hand the unchanged page back", { ti
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ answers: failureMode === "bad-probability"
       ? { operation: { choice: "CLICK", probabilities: { CLICK: -1 } } }
+      : failureMode === "unsupported" ? { operation: { choice: "TYPE" } }
       : { operation: { choice: "CLICK" }, click_target: { choice: "e999999" } } }));
   });
   server.listen(0, "127.0.0.1");
@@ -241,11 +243,15 @@ test("invalid Jev refs and provider failures hand the unchanged page back", { ti
     const probability = await call("jev_browser", { goal: "Reach the project form" });
     assert.equal((probability.details as { status?: string }).status, "error");
     assert.match(probability.content[0]?.type === "text" ? probability.content[0].text : "", /probabilit/);
+    failureMode = "unsupported";
+    const unsupported = await call("jev_browser", { goal: "Reach the project form" });
+    assert.equal((unsupported.details as { status?: string }).status, "error");
+    assert.equal((unsupported.details as { steps?: number }).steps, 0);
     failureMode = "http";
     const failed = await call("jev_browser", { goal: "Reach the project form" });
     assert.equal((failed.details as { status?: string }).status, "error");
     assert.match(failed.content[0]?.type === "text" ? failed.content[0].text : "", /HTTP 503/);
-    assert.doesNotMatch(JSON.stringify([invalid, probability, failed]), /test-key/);
+    assert.doesNotMatch(JSON.stringify([invalid, probability, unsupported, failed]), /test-key/);
     const page = await call("agent_browser", { args: ["--json", "snapshot", "-i"] });
     assert.match(page.content[0]?.type === "text" ? page.content[0].text : "", /Projects/);
     assert.doesNotMatch(page.content[0]?.type === "text" ? page.content[0].text : "", /New project/);
@@ -297,6 +303,7 @@ test("an external tab change during Jev's decision stops before clicking", { tim
     const stale = await call("jev_browser", { goal: "Reach the project form" });
     assert.equal((stale.details as { steps?: number }).steps, 0, JSON.stringify(stale.content));
     assert.ok(["blocked", "error"].includes((stale.details as { status: string }).status));
+    assert.match((stale.details as { url?: string }).url ?? "", /\/changed/);
     const page = await call("agent_browser", { args: ["--json", "get", "url"] });
     assert.match(page.content[0]?.type === "text" ? page.content[0].text : "", /\/changed/);
   } finally {

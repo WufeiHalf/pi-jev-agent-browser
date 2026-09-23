@@ -17,8 +17,9 @@ export default function browserPlugin(pi: ExtensionAPI): void {
           try {
             const config = await loadJevConfig();
             const handoff = await delegateBrowserGoal(host, config, goal, toolCallId, signal, ctx);
+            const recent = handoff.recentActions.slice(-6).map(action => `${action.operation}${action.target ? ` @${action.target}` : ""}`).join(", ") || "none";
             return {
-              content: [{ type: "text" as const, text: `Jev ${handoff.status}: ${handoff.reason}. Current URL: ${handoff.url ?? "unknown"}; tab: ${handoff.tabId ?? "unknown"}; actions: ${handoff.steps}. Calling agent retains E2E acceptance.` }],
+              content: [{ type: "text" as const, text: `Jev ${handoff.status}: ${handoff.reason}. Last observed URL: ${handoff.url ?? "unknown"}; tab: ${handoff.tabId ?? "unknown"}; actions: ${handoff.steps} (recent: ${recent}). Calling agent retains E2E acceptance.` }],
               details: handoff,
               isError: handoff.status === "error",
             };

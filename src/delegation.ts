@@ -65,9 +65,8 @@ function validateProbabilities(answer: unknown, selected: string | undefined, ca
   if (!entries.length || entries.some(([key, value]) => !candidates.has(key) || typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1)) {
     throw new Error("Jev returned invalid probabilities");
   }
-  const selectedProbability = selected ? (probabilities as Record<string, number>)[selected] : undefined;
-  if (selectedProbability === undefined || entries.some(([, value]) => (value as number) > selectedProbability + 0.000001)) {
-    throw new Error("Jev selected an option inconsistent with its probabilities");
+  if (!selected || !Object.hasOwn(probabilities, selected)) {
+    throw new Error("Jev selected an option missing from its probabilities");
   }
 }
 
@@ -188,6 +187,12 @@ export async function delegateBrowserGoal(
     sessionName ??= envelope.sessionName;
     return envelope;
   };
+  const refreshLocation = async (): Promise<void> => {
+    const active = tabs(await run(["tab", "list"])).find(tab => tab.active);
+    if (active) { tabId = active.tabId; currentUrl = active.url ?? currentUrl; }
+    const current = observation(await run(["snapshot"]));
+    currentUrl = current.url;
+  };
   try {
     for (let step = 0; step < MAX_STEPS; step += 1) {
       const beforeTabs = tabs(await run(["tab", "list"]));
@@ -222,17 +227,23 @@ export async function delegateBrowserGoal(
       recentActions.push({ operation: decision.operation, ...(decision.target ? { target: decision.target } : {}), url: current.url, tabId });
       const afterTabs = tabs(await run(["tab", "list"]));
       const newTabs = afterTabs.filter(tab => !beforeTabs.some(old => old.tabId === tab.tabId));
-      if (newTabs.length > 1) return result("blocked", "Multiple new tabs opened; target is ambiguous");
+      if (newTabs.length > 1) {
+        const activeAfter = afterTabs.find(tab => tab.active);
+        if (activeAfter) { tabId = activeAfter.tabId; currentUrl = activeAfter.url ?? currentUrl; }
+        return result("blocked", "Multiple new tabs opened; target is ambiguous");
+      }
       if (newTabs.length === 1) {
         await run(["tab", newTabs[0]!.tabId]);
         tabId = newTabs[0]!.tabId;
         currentUrl = newTabs[0]!.url;
       }
     }
+    if (!executionSignal.aborted) try { await refreshLocation(); } catch {}
     return result("limit", "Jev reached the step limit");
   } catch (error) {
     if (cancellation.aborted) return result("cancelled", "Delegation was cancelled");
     if (deadline.aborted) return result("limit", "Jev reached the time limit");
+    try { await refreshLocation(); } catch {}
     return result("error", error instanceof Error ? error.message : "Delegation failed");
   }
 }

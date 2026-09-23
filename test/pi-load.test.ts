@@ -10,7 +10,7 @@ test("Pi loads one browser plugin with both tools", { timeout: 30_000 }, async (
   const loader = new DefaultResourceLoader({
     cwd: process.cwd(),
     agentDir: dir,
-    additionalExtensionPaths: [join(process.cwd(), "src", "extension.ts")],
+    additionalExtensionPaths: [process.cwd()],
   });
   try {
     await loader.reload();
