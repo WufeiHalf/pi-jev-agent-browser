@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Browser plugin fixture</title></head>
+<body>
+  <h1>Projects</h1>
+  <button id="open-form" onclick="document.getElementById('form').hidden = false">New project</button>
+  <form id="form" hidden onsubmit="event.preventDefault(); document.getElementById('result').textContent = document.getElementById('name').value">
+    <label>Project name <input id="name" type="text"></label>
+    <button type="submit">Create</button>
+  </form>
+  <p id="result"></p>
+</body>
+</html>

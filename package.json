@@ -1,0 +1,31 @@
+{
+  "name": "pi-jev-agent-browser",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22.19.0" },
+  "pi": { "extensions": ["./src/extension.ts"] },
+  "dependencies": {
+    "pi-agent-browser-native": "git+https://github.com/WufeiHalf/pi-agent-browser-native.git#c189078f8dc09e44d35eb83bd00e188ce836fd1d"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.87.0",
+    "@earendil-works/pi-ai": "0.87.0",
+    "@earendil-works/pi-tui": "0.87.0",
+    "typebox": "^1.1.38",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "@types/node": "^25.9.3"
+  },
+  "scripts": {
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  }
+}
