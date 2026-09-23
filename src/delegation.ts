@@ -16,7 +16,7 @@ export interface DelegationResult {
   url?: string;
   tabId?: string;
   sessionName?: string;
-  recentActions: Array<{ operation: string; target?: string; url?: string; tabId?: string }>;
+  recentActions: Array<{ operation: string; target?: string; name?: string; value?: string; url?: string; tabId?: string }>;
   jevCalls: number;
   browserCalls: number;
   durationMs: number;
@@ -25,6 +25,7 @@ export interface DelegationResult {
 const MAX_STEPS = 16;
 const MAX_DURATION_MS = 90_000;
 const DECISION_TIMEOUT_MS = 25_000;
+const INTERACTIVE_ROLES = new Set(["button", "link", "menuitem", "tab", "checkbox", "radio", "switch", "combobox", "listbox", "option", "textbox", "searchbox", "slider"]);
 
 function textResult(result: AgentToolResult<unknown> & { isError?: boolean }): NativeEnvelope {
   const text = result.content.find(item => item.type === "text")?.text;
@@ -108,8 +109,14 @@ function readDecision(payload: unknown, candidates: Set<string>, refs: Record<st
   return { operation, target };
 }
 
-async function decide(config: JevConfig, goal: string, current: BrowserObservation, signal: AbortSignal): Promise<Decision> {
-  const refs = Object.fromEntries(Object.entries(current.refs).slice(0, 180));
+function clickableRefs(current: BrowserObservation, excludeRef?: string): Record<string, Ref> {
+  const entries = Object.entries(current.refs).slice(0, 180).filter(([ref]) => ref !== excludeRef);
+  const controls = entries.filter(([, info]) => INTERACTIVE_ROLES.has(info.role ?? ""));
+  return Object.fromEntries(controls.length ? controls : excludeRef ? [] : entries);
+}
+
+async function decide(config: JevConfig, goal: string, current: BrowserObservation, signal: AbortSignal, recentActions: DelegationResult["recentActions"], excludeRef?: string): Promise<Decision> {
+  const refs = clickableRefs(current, excludeRef);
   const options = Object.fromEntries(Object.entries(selectOptions(current)).filter(([, option]) => Object.hasOwn(refs, option.ref)));
   const operations: Record<string, string> = {
     SCROLL_DOWN: "Scroll down to look for more controls.",
@@ -140,7 +147,8 @@ async function decide(config: JevConfig, goal: string, current: BrowserObservati
       criteria: Object.fromEntries(Object.entries(options).map(([id, option]) => [id, option.label])),
     };
   }
-  const request = { model: config.modelId, state: { goal, url: current.url, snapshot: current.snapshot.slice(0, 18_000), refs }, questions };
+  const request = { model: config.modelId, state: { goal, url: current.url, snapshot: current.snapshot.slice(0, 18_000), refs,
+    recentActions: recentActions.slice(-6).map(({ operation, name, value }) => ({ operation, name, value })) }, questions };
   const timeout = AbortSignal.timeout(DECISION_TIMEOUT_MS);
   const response = await fetch(config.baseUrl, {
     method: "POST",
@@ -174,6 +182,7 @@ export async function delegateBrowserGoal(
   let browserCalls = 0;
   let lastActionSignature: string | undefined;
   let lastActionSnapshot: string | undefined;
+  let lastClickRef: string | undefined;
   const result = (status: DelegationResult["status"], reason: string): DelegationResult => ({
     status, reason, steps: recentActions.length, url: currentUrl, tabId, sessionName, recentActions,
     jevCalls, browserCalls, durationMs: Date.now() - started,
@@ -202,8 +211,12 @@ export async function delegateBrowserGoal(
       tabId = active.tabId;
       const current = observation(await run(["snapshot"]));
       currentUrl = current.url;
+      const excludeRef = lastClickRef && current.snapshot === lastActionSnapshot ? lastClickRef : undefined;
+      if (excludeRef && !Object.keys(clickableRefs(current, excludeRef)).length) {
+        return result("blocked", "Jev repeated a click without a page change and no other control is available");
+      }
       jevCalls += 1;
-      const decision = await decide(config, goal, current, executionSignal);
+      const decision = await decide(config, goal, current, executionSignal, recentActions, excludeRef);
       const latestTabs = tabs(await run(["tab", "list"]));
       if (latestTabs.find(tab => tab.active)?.tabId !== tabId
         || latestTabs.some(tab => !beforeTabs.some(prior => prior.tabId === tab.tabId))) {
@@ -222,12 +235,14 @@ export async function delegateBrowserGoal(
       }
       lastActionSignature = signature;
       lastActionSnapshot = current.snapshot;
+      lastClickRef = decision.operation === "CLICK" ? decision.target : undefined;
       if (decision.operation === "WAIT") await run(["wait", "250"]);
       else if (decision.operation === "CLICK") await run(["click", `@${decision.target}`]);
       else if (decision.operation === "SELECT") await run(["select", `@${decision.target}`, decision.value!]);
       else if (decision.operation === "SCROLL_DOWN") await run(["scroll", "down", "560"]);
       else if (decision.operation === "SCROLL_UP") await run(["scroll", "up", "560"]);
-      recentActions.push({ operation: decision.operation, ...(decision.target ? { target: decision.target } : {}), url: current.url, tabId });
+      recentActions.push({ operation: decision.operation, ...(decision.target ? { target: decision.target, name: target?.name } : {}),
+        ...(decision.value ? { value: decision.value } : {}), url: current.url, tabId });
       const afterTabs = tabs(await run(["tab", "list"]));
       const newTabs = afterTabs.filter(tab => !beforeTabs.some(old => old.tabId === tab.tabId));
       if (newTabs.length > 1) {

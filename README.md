@@ -20,7 +20,7 @@
 }
 ```
 
-`baseUrl` 是**完整的 System One 请求地址**，不是只有域名。可以使用任何兼容 `{model, state, questions}` 请求与 `answers` 决策响应的服务；不要填普通聊天接口。插件按字面使用这三个值，不预设提供方。不要把含真实密钥的配置文件提交到仓库；密钥不出现在普通工具结果中。当前页面的可见文字、控件名和 URL 会作为决策状态发往配置的服务。
+Command Code 的 `baseUrl` 是 `https://api.commandcode.ai/provider/v1/systemone`，`modelId` 是 `typesafe/jev`；这里只需另外填写其 API key。`baseUrl` 是**完整的 System One 请求地址**，不是只有域名。可以使用任何兼容 `{model, state, questions}` 请求与 `answers` 决策响应的服务；不要填普通聊天接口。插件按字面使用这三个值，不预设提供方。不要把含真实密钥的配置文件提交到仓库；密钥不出现在普通工具结果中。当前页面的可见文字、控件名和 URL 会作为决策状态发往配置的服务。
 
 ## 使用方式
 
@@ -33,6 +33,8 @@
 
 ## 验证与来源
 
-`npm run typecheck` 和 `npm test` 运行确定性测试。测试通过真实 native 执行路径和本地网页，但 Jev 决策由本地兼容服务模拟；**模拟服务通过不等于真实 Jev 服务验收**。有真实配置后，应重复本地 E2E，分别记录直接操作与混合操作的耗时、调用 agent 轮次、Jev 请求数、浏览器调用数及成功率；没有测量结果不宣称提速。
+`npm run typecheck` 和 `npm test` 运行确定性测试。测试通过真实 native 执行路径和本地网页，但 Jev 决策由本地兼容服务模拟。写入真实配置后，`npx tsx scripts/live-e2e.ts` 使用真实 Jev 服务运行工具边界交接。`npx tsx scripts/benchmark.ts 3` 则通过真实 Pi 入口、同一 fixture 和同一调用 agent 模型各跑三次直接流程与混合流程，把非敏感指标写入 `benchmarks/local-commandcode.json`；重测用 `PI_JEV_BENCHMARK_FRESH=1`。基准需要安装 `pi-commandcode-provider`，也可以用 `PI_JEV_BENCHMARK_PROVIDER` 指向其扩展入口并用 `PI_JEV_BENCHMARK_MODEL` 指定调用 agent 模型。
+
+在当前本机三对测试中，直接流程成功 2/3、混合流程成功 3/3；耗时中位数分别为 63.2 秒与 48.2 秒，调用 agent 轮次中位数为 24 与 12，Jev 决策请求为 0 与 9 次，native 浏览器执行调用为 24 与 58 次。直接流程有一轮虽自报 PASS，却没有实际执行约定的 `get value #category` 验收，因此计为未通过。这些只是当前 fixture、模型和网络条件下的小样本结果，不代表通用提速或稳定成功率。
 
 本插件依赖的 [WufeiHalf/pi-agent-browser-native](https://github.com/WufeiHalf/pi-agent-browser-native) fork 来自 [fitchmultz/pi-agent-browser-native](https://github.com/fitchmultz/pi-agent-browser-native)，作者 Mitch Fultz，MIT 许可证；许可证随依赖保留。决策与交接设计参考 [forvela/jev-agent-browser](https://github.com/forvela/jev-agent-browser) 和 [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)，两者均为 MIT；本项目没有复制它们的源码。`agent-browser` CLI 是外部运行依赖，不随本插件打包。

@@ -52,11 +52,11 @@ test("calling agent delegates a multi-step goal and takes over the same browser"
   const detailHtml = await readFile(new URL("./fixtures/detail.html", import.meta.url), "utf8");
   const server = createServer(async (req, res) => {
     if (req.url === "/flow") { res.setHeader("content-type", "text/html"); res.end(html); return; }
-    if (req.url === "/detail") { res.setHeader("content-type", "text/html"); res.end(detailHtml); return; }
+    if (req.url === "/detail.html") { res.setHeader("content-type", "text/html"); res.end(detailHtml); return; }
     if (req.url !== "/jev") { res.writeHead(404).end(); return; }
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
-    const body = JSON.parse(Buffer.concat(chunks).toString()) as { state: { goal: string; snapshot: string; refs: Record<string, { name: string }> }; questions: { select_target?: { criteria: Record<string, string> } } }; 
+    const body = JSON.parse(Buffer.concat(chunks).toString()) as { state: { goal: string; snapshot: string; refs: Record<string, { name: string }>; recentActions?: unknown[] }; questions: { select_target?: { criteria: Record<string, string> } } };
     const names = Object.values(body.state.refs).map(ref => ref.name?.trim());
     observed.push(names.join(","));
     receivedGoals.push(body.state.goal);
@@ -67,6 +67,7 @@ test("calling agent delegates a multi-step goal and takes over the same browser"
         : names.includes("Show summary") ? "Show summary" : "Open details"
       : body.state.goal.includes("Create")
       ? body.state.snapshot.includes('- paragraph\n  - StaticText "E2E Demo"') ? undefined : "Create"
+      : names.includes("New project") && body.state.recentActions?.length === 1 ? "Projects"
       : names.includes("New project") && !names.includes("Project name") ? "New project"
       : names.includes("Projects") && !names.includes("New project") ? "Projects" : undefined;
     const target = Object.entries(body.state.refs).find(([, ref]) => ref.name === targetName)?.[0];
@@ -105,7 +106,8 @@ test("calling agent delegates a multi-step goal and takes over the same browser"
     assert.notEqual((filled as typeof filled & { isError?: boolean }).isError, true);
     const second = await call("jev_browser", { goal: "Create the project and stop when E2E Demo appears" });
     assert.equal((second.details as { status?: string }).status, "completed", `${JSON.stringify(second.content)} snapshots=${JSON.stringify(createSnapshots)}`);
-    assert.equal(receivedGoals.filter(goal => goal.includes("Navigate")).length, 3);
+    assert.equal(receivedGoals.filter(goal => goal.includes("Navigate")).length, 4);
+    assert.doesNotMatch(observed[2] ?? "", /Projects/, "stalled click must not be offered again");
     assert.ok(receivedGoals.filter(goal => goal.includes("Create")).length >= 2);
     const accepted = await call("agent_browser", { args: ["--json", "get", "text", "#result"] });
     assert.match(accepted.content[0]?.type === "text" ? accepted.content[0].text : "", /E2E Demo/);
@@ -130,7 +132,7 @@ test("repeated Jev clicks stop and hand control back before the step limit", { t
   const previous = process.env.PI_CODING_AGENT_DIR;
   let closeBrowser: (() => Promise<unknown>) | undefined;
   let decisions = 0;
-  const html = await readFile(new URL("./fixtures/flow.html", import.meta.url), "utf8");
+  const html = '<!doctype html><html><body><button onclick="void 0">Projects</button></body></html>';
   const server = createServer(async (req, res) => {
     if (req.url === "/flow") { res.setHeader("content-type", "text/html"); res.end(html); return; }
     if (req.url !== "/jev") { res.writeHead(404).end(); return; }
