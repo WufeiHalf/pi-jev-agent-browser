@@ -6,8 +6,9 @@
   "license": "MIT",
   "engines": { "node": ">=22.19.0" },
   "pi": { "extensions": ["./src/extension.ts"] },
+  "files": ["src", "README.md", "LICENSE"],
   "dependencies": {
-    "pi-agent-browser-native": "git+https://github.com/WufeiHalf/pi-agent-browser-native.git#c189078f8dc09e44d35eb83bd00e188ce836fd1d"
+    "pi-agent-browser-native": "git+https://github.com/WufeiHalf/pi-agent-browser-native.git#ffe2257"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",

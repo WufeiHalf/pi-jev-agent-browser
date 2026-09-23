@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Jev flow fixture</title></head>
+<body>
+  <h1>Dashboard</h1>
+  <button id="projects" onclick="document.getElementById('project-menu').hidden = false">Projects</button>
+  <section id="project-menu" hidden>
+    <button id="new" onclick="document.getElementById('form').hidden = false">New project</button>
+  </section>
+  <form id="form" hidden onsubmit="event.preventDefault(); document.getElementById('result').textContent = document.getElementById('name').value; document.getElementById('open-detail').hidden = false">
+    <label>Project name <input id="name" type="text"></label>
+    <button type="submit">Create</button>
+  </form>
+  <p id="result"></p>
+  <button id="open-detail" hidden onclick="window.open('/detail', '_blank')">Open details</button>
+</body>
+</html>
