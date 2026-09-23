@@ -150,16 +150,25 @@ async function decide(config: JevConfig, goal: string, current: BrowserObservati
   const request = { model: config.modelId, state: { goal, url: current.url, snapshot: current.snapshot.slice(0, 18_000), refs,
     recentActions: recentActions.slice(-6).map(({ operation, name, value }) => ({ operation, name, value })) }, questions };
   const timeout = AbortSignal.timeout(DECISION_TIMEOUT_MS);
-  const response = await fetch(config.baseUrl, {
-    method: "POST",
-    headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" },
-    body: JSON.stringify(request),
-    signal: AbortSignal.any([signal, timeout]),
-  });
-  if (!response.ok) throw new Error(`Jev provider returned HTTP ${response.status}`);
-  let payload: unknown;
-  try { payload = await response.json(); } catch { throw new Error("Jev provider returned invalid JSON"); }
-  return readDecision(payload, new Set(Object.keys(operations)), refs, options);
+  try {
+    const response = await fetch(config.baseUrl, {
+      method: "POST",
+      headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify(request),
+      signal: AbortSignal.any([signal, timeout]),
+    });
+    if (!response.ok) throw new Error(`Jev provider returned HTTP ${response.status}`);
+    let payload: unknown;
+    try { payload = await response.json(); }
+    catch (error) {
+      if (timeout.aborted || signal.aborted) throw error;
+      throw new Error("Jev provider returned invalid JSON");
+    }
+    return readDecision(payload, new Set(Object.keys(operations)), refs, options);
+  } catch (error) {
+    if (timeout.aborted && !signal.aborted) throw new Error(`Jev decision timed out after ${DECISION_TIMEOUT_MS / 1000}s`);
+    throw error;
+  }
 }
 
 export async function delegateBrowserGoal(

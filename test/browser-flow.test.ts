@@ -323,3 +323,129 @@ test("an external tab change during Jev's decision stops before clicking", { tim
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+test("multiple tabs opened by one click stop as ambiguous without guessing", { timeout: 120_000 }, async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "pi-jev-ambiguous-"));
+  const agentDir = join(cwd, "agent");
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  const html = await readFile(new URL("./fixtures/multi.html", import.meta.url), "utf8");
+  const detail = await readFile(new URL("./fixtures/detail.html", import.meta.url), "utf8");
+  const server = createServer(async (req, res) => {
+    if (req.url === "/multi") { res.setHeader("content-type", "text/html"); res.end(html); return; }
+    if (req.url?.startsWith("/detail.html")) { res.setHeader("content-type", "text/html"); res.end(detail); return; }
+    if (req.url !== "/jev") { res.writeHead(404).end(); return; }
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    const { state } = JSON.parse(Buffer.concat(chunks).toString()) as { state: { refs: Record<string, { name: string }> } };
+    const target = Object.entries(state.refs).find(([, ref]) => ref.name === "Open two details")?.[0];
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ answers: { operation: { choice: "CLICK" }, click_target: { choice: target } } }));
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const port = (server.address() as { port: number }).port;
+  process.env.PI_CODING_AGENT_DIR = agentDir;
+  let closeBrowser: (() => Promise<unknown>) | undefined;
+  try {
+    await mkdir(join(agentDir, "pi-jev-agent-browser"), { recursive: true });
+    await writeFile(join(agentDir, "pi-jev-agent-browser", "config.json"), JSON.stringify({ baseUrl: `http://127.0.0.1:${port}/jev`, apiKey: "test-key", modelId: "test-jev" }));
+    const { call } = browserHarness(cwd);
+    closeBrowser = () => call("agent_browser", { args: ["close"] });
+    const opened = await call("agent_browser", { args: ["open", `http://127.0.0.1:${port}/multi`] });
+    const delegated = await call("jev_browser", { goal: "Open both detail tabs and stop if ambiguous" });
+    const handoff = delegated.details as { status: string; reason: string; steps: number; sessionName?: string };
+    assert.equal(handoff.status, "blocked", JSON.stringify(delegated.content));
+    assert.match(handoff.reason, /Multiple new tabs/);
+    assert.equal(handoff.steps, 1);
+    assert.equal(handoff.sessionName, (opened.details as { sessionName?: string }).sessionName);
+    const listed = await call("agent_browser", { args: ["--json", "tab", "list"] });
+    const tabs = JSON.parse(listed.content[0]?.type === "text" ? listed.content[0].text : "{}").data?.tabs as unknown[];
+    assert.equal(tabs.length, 3);
+  } finally {
+    try { await closeBrowser?.(); } catch {}
+    server.closeAllConnections();
+    server.close();
+    if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = previous;
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("an updating page stops after the bounded action count", { timeout: 120_000 }, async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "pi-jev-limit-"));
+  const agentDir = join(cwd, "agent");
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  const html = '<!doctype html><html><body><button id="counter" onclick="this.textContent=`Count ${++window.n}`">Count 0</button><script>window.n=0</script></body></html>';
+  const server = createServer(async (req, res) => {
+    if (req.url === "/counter") { res.setHeader("content-type", "text/html"); res.end(html); return; }
+    if (req.url !== "/jev") { res.writeHead(404).end(); return; }
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    const { state } = JSON.parse(Buffer.concat(chunks).toString()) as { state: { refs: Record<string, { name: string }> } };
+    const target = Object.entries(state.refs).find(([, ref]) => ref.name?.startsWith("Count"))?.[0];
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ answers: { operation: { choice: "CLICK" }, click_target: { choice: target } } }));
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const port = (server.address() as { port: number }).port;
+  process.env.PI_CODING_AGENT_DIR = agentDir;
+  let closeBrowser: (() => Promise<unknown>) | undefined;
+  try {
+    await mkdir(join(agentDir, "pi-jev-agent-browser"), { recursive: true });
+    await writeFile(join(agentDir, "pi-jev-agent-browser", "config.json"), JSON.stringify({ baseUrl: `http://127.0.0.1:${port}/jev`, apiKey: "test-key", modelId: "test-jev" }));
+    const { call } = browserHarness(cwd);
+    closeBrowser = () => call("agent_browser", { args: ["close"] });
+    await call("agent_browser", { args: ["open", `http://127.0.0.1:${port}/counter`] });
+    const delegated = await call("jev_browser", { goal: "Keep counting" });
+    assert.equal((delegated.details as { status?: string }).status, "limit", JSON.stringify(delegated.content));
+    assert.equal((delegated.details as { steps?: number }).steps, 16);
+    const count = await call("agent_browser", { args: ["get", "text", "#counter"] });
+    assert.match(count.content[0]?.type === "text" ? count.content[0].text : "", /Count 16/);
+  } finally {
+    try { await closeBrowser?.(); } catch {}
+    server.closeAllConnections();
+    server.close();
+    if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = previous;
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("a stalled Jev provider times out and returns control without another click", { timeout: 60_000 }, async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "pi-jev-timeout-"));
+  const agentDir = join(cwd, "agent");
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  const html = await readFile(new URL("./fixtures/flow.html", import.meta.url), "utf8");
+  const server = createServer((req, res) => {
+    if (req.url === "/flow") { res.setHeader("content-type", "text/html"); res.end(html); return; }
+    if (req.url === "/jev") return; // Keep the System One request unanswered.
+    res.writeHead(404).end();
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const port = (server.address() as { port: number }).port;
+  process.env.PI_CODING_AGENT_DIR = agentDir;
+  let closeBrowser: (() => Promise<unknown>) | undefined;
+  try {
+    await mkdir(join(agentDir, "pi-jev-agent-browser"), { recursive: true });
+    await writeFile(join(agentDir, "pi-jev-agent-browser", "config.json"), JSON.stringify({ baseUrl: `http://127.0.0.1:${port}/jev`, apiKey: "test-key", modelId: "test-jev" }));
+    const { call } = browserHarness(cwd);
+    closeBrowser = () => call("agent_browser", { args: ["close"] });
+    await call("agent_browser", { args: ["open", `http://127.0.0.1:${port}/flow`] });
+    const delegated = await call("jev_browser", { goal: "Open the project form" });
+    const handoff = delegated.details as { status: string; reason: string; steps: number };
+    assert.equal(handoff.status, "error", JSON.stringify(delegated.content));
+    assert.match(handoff.reason, /Jev decision timed out/);
+    assert.equal(handoff.steps, 0);
+    const page = await call("agent_browser", { args: ["--json", "snapshot", "-i"] });
+    assert.doesNotMatch(page.content[0]?.type === "text" ? page.content[0].text : "", /New project/);
+  } finally {
+    try { await closeBrowser?.(); } catch {}
+    server.closeAllConnections();
+    server.close();
+    if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = previous;
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
