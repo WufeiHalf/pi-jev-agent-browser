@@ -1,0 +1,163 @@
+{
+  "fixture": "test/fixtures/flow.html + detail.html",
+  "model": "commandcode/deepseek/deepseek-v4.1-flash",
+  "thinking": "off",
+  "runsPerMode": 3,
+  "timingBoundary": "Pi process spawn to close",
+  "parentTurns": "Pi turn_start events",
+  "browserCalls": "parent agent_browser calls plus delegated native host.execute calls",
+  "records": [
+    {
+      "mode": "direct",
+      "index": 1,
+      "success": true,
+      "modelReportedPass": true,
+      "elapsedMs": 71036,
+      "parentTurns": 26,
+      "parentToolCalls": 25,
+      "jevCalls": 0,
+      "browserCalls": 25,
+      "checks": {
+        "result": true,
+        "category": true,
+        "summary": true
+      },
+      "jevStops": [],
+      "sessionNames": [
+        "pi-root-8f26c1ed9021421a84d1f105"
+      ],
+      "closed": true,
+      "exitCode": 0,
+      "stderrPresent": true
+    },
+    {
+      "mode": "hybrid",
+      "index": 1,
+      "success": true,
+      "modelReportedPass": true,
+      "elapsedMs": 48317,
+      "parentTurns": 11,
+      "parentToolCalls": 11,
+      "jevCalls": 10,
+      "browserCalls": 63,
+      "checks": {
+        "result": true,
+        "category": true,
+        "summary": true
+      },
+      "jevStops": [
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "sessionNames": [
+        "pi-root-11545bf63254bc6091760390"
+      ],
+      "closed": true,
+      "exitCode": 0,
+      "stderrPresent": true
+    },
+    {
+      "mode": "direct",
+      "index": 2,
+      "success": true,
+      "modelReportedPass": true,
+      "elapsedMs": 71057,
+      "parentTurns": 26,
+      "parentToolCalls": 25,
+      "jevCalls": 0,
+      "browserCalls": 25,
+      "checks": {
+        "result": true,
+        "category": true,
+        "summary": true
+      },
+      "jevStops": [],
+      "sessionNames": [
+        "pi-root-b291378296fcd82a3d2e8982"
+      ],
+      "closed": true,
+      "exitCode": 0,
+      "stderrPresent": true
+    },
+    {
+      "mode": "hybrid",
+      "index": 2,
+      "success": true,
+      "modelReportedPass": true,
+      "elapsedMs": 59802,
+      "parentTurns": 16,
+      "parentToolCalls": 15,
+      "jevCalls": 9,
+      "browserCalls": 61,
+      "checks": {
+        "result": true,
+        "category": true,
+        "summary": true
+      },
+      "jevStops": [
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "sessionNames": [
+        "pi-root-23fbcbb1bbf9e91ed97d0d00"
+      ],
+      "closed": true,
+      "exitCode": 0,
+      "stderrPresent": true
+    },
+    {
+      "mode": "direct",
+      "index": 3,
+      "success": true,
+      "modelReportedPass": true,
+      "elapsedMs": 59819,
+      "parentTurns": 21,
+      "parentToolCalls": 26,
+      "jevCalls": 0,
+      "browserCalls": 26,
+      "checks": {
+        "result": true,
+        "category": true,
+        "summary": true
+      },
+      "jevStops": [],
+      "sessionNames": [
+        "pi-root-f5a3bd48bdb15cfbcd314405"
+      ],
+      "closed": true,
+      "exitCode": 0,
+      "stderrPresent": true
+    },
+    {
+      "mode": "hybrid",
+      "index": 3,
+      "success": true,
+      "modelReportedPass": true,
+      "elapsedMs": 66144,
+      "parentTurns": 18,
+      "parentToolCalls": 17,
+      "jevCalls": 11,
+      "browserCalls": 69,
+      "checks": {
+        "result": true,
+        "category": true,
+        "summary": true
+      },
+      "jevStops": [
+        "error",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "sessionNames": [
+        "pi-root-06425ce751c1c1e242615c02"
+      ],
+      "closed": true,
+      "exitCode": 0,
+      "stderrPresent": true
+    }
+  ]
+}

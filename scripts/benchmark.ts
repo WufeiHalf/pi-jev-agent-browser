@@ -9,6 +9,7 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 const runs = Number(process.argv[2] ?? 3);
 assert.ok(Number.isInteger(runs) && runs > 0 && runs <= 10, "runs must be 1..10");
 const model = process.env.PI_JEV_BENCHMARK_MODEL ?? "commandcode/deepseek/deepseek-v4-flash";
+const thinking = process.env.PI_JEV_BENCHMARK_THINKING;
 const provider = process.env.PI_JEV_BENCHMARK_PROVIDER ?? join(getAgentDir(), "npm", "node_modules", "pi-commandcode-provider", "index.ts");
 const flow = await readFile(new URL("../test/fixtures/flow.html", import.meta.url), "utf8");
 const detail = await readFile(new URL("../test/fixtures/detail.html", import.meta.url), "utf8");
@@ -29,7 +30,8 @@ const prompts = {
 type Mode = keyof typeof prompts;
 interface ToolEvent { type: string; toolName?: string; args?: { args?: string[] }; result?: { isError?: boolean; details?: { jevCalls?: number; browserCalls?: number; sessionName?: string }; content?: Array<{ type: string; text?: string }> }; message?: { role?: string; content?: Array<{ type: string; text?: string }> } }
 async function execute(mode: Mode, index: number) {
-  const args = ["--approve", "--no-extensions", "-e", ".", "-e", provider, "--model", model, "--tools", mode === "direct" ? "agent_browser" : "agent_browser,jev_browser", "--no-session", "--mode", "json", prompts[mode]];
+  const args = ["--approve", "--no-extensions", "-e", ".", "-e", provider, "--model", model,
+    ...(thinking ? ["--thinking", thinking] : []), "--tools", mode === "direct" ? "agent_browser" : "agent_browser,jev_browser", "--no-session", "--mode", "json", prompts[mode]];
   const started = performance.now();
   const child = spawn("pi", args, { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe"] });
   let stdout = "";
@@ -67,16 +69,16 @@ async function execute(mode: Mode, index: number) {
   return record;
 }
 try {
-  const outputPath = join("benchmarks", "local-commandcode.json");
+  const outputPath = process.env.PI_JEV_BENCHMARK_OUTPUT ?? join("benchmarks", "local-commandcode.json");
   let records: Awaited<ReturnType<typeof execute>>[] = [];
   if (process.env.PI_JEV_BENCHMARK_FRESH !== "1") {
     try {
-      const previous = JSON.parse(await readFile(outputPath, "utf8")) as { model: string; records: typeof records };
-      if (previous.model === model) records = previous.records.filter(record => record.index <= runs);
+      const previous = JSON.parse(await readFile(outputPath, "utf8")) as { model: string; thinking?: string; records: typeof records };
+      if (previous.model === model && previous.thinking === thinking) records = previous.records.filter(record => record.index <= runs);
     } catch {}
   }
   const save = async () => {
-    const output = { fixture: "test/fixtures/flow.html + detail.html", model, runsPerMode: runs, timingBoundary: "Pi process spawn to close", parentTurns: "Pi turn_start events", browserCalls: "parent agent_browser calls plus delegated native host.execute calls", records };
+    const output = { fixture: "test/fixtures/flow.html + detail.html", model, thinking, runsPerMode: runs, timingBoundary: "Pi process spawn to close", parentTurns: "Pi turn_start events", browserCalls: "parent agent_browser calls plus delegated native host.execute calls", records };
     await mkdir("benchmarks", { recursive: true });
     await writeFile(outputPath, JSON.stringify(output, null, 2) + "\n");
   };
